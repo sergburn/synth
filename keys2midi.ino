@@ -1,3 +1,5 @@
+#include <Arduino.h>
+#include <SoftwareSerial.h>
 
 int pinLED = 13;
 
@@ -5,6 +7,8 @@ int pinLED = 13;
 int pinData = 10;
 int pinLatch = 11;
 int pinClock = 12;
+int pinTx = 8;
+int pinRx = 9; // not used
 
 // IN - MUX 4052
 int pinX = 3;
@@ -15,7 +19,10 @@ int pinB = 7;
 const int KNumKeys = 64;
 byte keys[KNumKeys];
 
+// First key of my keyboard 
 const byte KMidiStart = 24; // C1
+
+SoftwareSerial midiOut(pinRx, pinTx);
 
 byte readMux4052()
 {
@@ -39,13 +46,23 @@ byte readMux4052()
   return val;
 }
 
+byte invert(byte v)
+{
+  byte r = 0;
+  for (int i = 0; i < 8; i++)
+  {
+    r <<= 1;
+    r |= v & 1;
+    v >>= 1;
+  }
+  return r;
+}
+
 void printNote(byte midiKey)
 {
-  const byte C0 = 12;
   const byte Octave = 12;
-
-  midiKey -= C0;
-  byte octave = midiKey / Octave;
+  
+  byte octave = midiKey / Octave - 1;
   byte note = midiKey % Octave;
 
   const char* notes[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "H"};
@@ -54,11 +71,25 @@ void printNote(byte midiKey)
   Serial.print(octave);
 }
 
+void sendMidiNote(byte midiKey, bool on)
+{
+  const byte KNoteOn = 0x90;
+  const byte KVelo = 0x40; // default Velocity
+  midiOut.write(KNoteOn);
+  midiOut.write(midiKey);
+  midiOut.write(on ? KVelo : 0);
+  
+  Serial.print(midiKey);
+  Serial.println(on ? " ON" : " OFF");
+}
+
 void setup()
 {
   Serial.begin(9600);
   pinMode(pinLED, OUTPUT);
 
+  midiOut.begin(31250);
+/**/
   pinMode(pinLatch, OUTPUT);
   pinMode(pinClock, OUTPUT);
   pinMode(pinData, OUTPUT);
@@ -68,6 +99,7 @@ void setup()
 
   pinMode(pinX, INPUT);
   pinMode(pinY, INPUT);
+/**/
 
   for (int i = 0; i < KNumKeys; i++)
   {
@@ -82,7 +114,7 @@ void loop()
 
 //  Serial.print("STime: ");
 //  Serial.println(millis());
-
+/**/
 #ifdef USE_SHIFTOUT
   for (int i = 0; i < 8; i++)
   {
@@ -106,6 +138,9 @@ void loop()
 #endif
 
     byte resp = readMux4052();
+    // wiring requires to invert this value
+    resp = invert(resp);
+/**/
 /**
     Serial.print("SCAN ");
     Serial.print(i);
@@ -113,6 +148,7 @@ void loop()
 /**
     Serial.print(" RESP ");
     Serial.println(resp);
+/**/
 /**/
     for (int j = 0; j < 8; j++)
     {
@@ -122,12 +158,14 @@ void loop()
       if (pressed != keys[key])
       {
         keys[key] = pressed;
-
+/**
         Serial.print(key);
         Serial.print(" ");
         printNote(KMidiStart + key);
         Serial.println(pressed ? " DN" : " UP");
-
+/**/
+        sendMidiNote(KMidiStart + key, pressed);
+        
         if (key == 0)
         {
           digitalWrite(pinLED, pressed ? HIGH : LOW);
@@ -135,7 +173,5 @@ void loop()
       }
     }
   }
-
-//  Serial.print("ETime: ");
-//  Serial.println(millis());
+/**/
 }
